@@ -26,6 +26,162 @@ MODELS_DIR="$BASE_DIR/model"
 # For imports
 base_package_name=$(echo "$BASE_DIR" | sed 's|.*java/||; s|/|.|g')
 
+# Function to generate DTO Requests---------------------------------------------------------------------------------------------------------
+generate_reqest_dto() {
+    TARGET_DIR="$BASE_DIR/dto/request"
+    local model_file="$1"
+    local request_type="DtoRequest"
+    local model_name=$(basename "$model_file" .java)
+    if [[ $model_name == *Model ]]; then
+        model_name="${model_name%Model}"
+    fi
+
+    local lowercase_model_name=$(echo "$model_name" | tr '[:upper:]' '[:lower:]')
+    local dto_dir="$TARGET_DIR"
+    mkdir -p "$dto_dir"
+    create_request_file="$dto_dir/${model_name}${request_type}.java"
+
+    # Extract package name from the DTO directory structure
+    package_name=$(dirname "${create_request_file}" | sed 's|.*java/||; s|/|.|g')
+
+    # Add imports
+    echo "package $package_name;" > "$create_request_file"
+    echo "" >> "$create_request_file"
+    echo "import jakarta.validation.constraints.NotBlank;" >> "$create_request_file"
+    echo "import jakarta.validation.constraints.NotNull;" >> "$create_request_file"
+    echo "import jakarta.validation.constraints.Positive;" >> "$create_request_file"
+    echo "import lombok.Data;" >> "$create_request_file"
+    echo "import lombok.AllArgsConstructor;" >> "$create_request_file"
+    echo "import lombok.NoArgsConstructor;" >> "$create_request_file"
+    echo "" >> "$create_request_file"
+
+    if grep -q "BigDecimal" "$model_file"; then
+        echo "import java.math.BigDecimal;" >> "$create_request_file"
+    fi
+    if grep -q " Date " "$model_file"; then
+        echo "import java.util.Date;" >> "$create_request_file"
+    fi
+    echo "" >> "$create_request_file"
+
+    # Generate CreateRequest class
+    echo "@AllArgsConstructor" >> "$create_request_file"
+    echo "@NoArgsConstructor" >> "$create_request_file"
+    echo "@Data" >> "$create_request_file"
+    echo "public class $(basename "$create_request_file" .java) {" >> "$create_request_file"
+
+    # Extract fields from the original model class, excluding id field and LocalDateTime type
+    fields=$(grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/' | grep -v "id" | grep -v "LocalDateTime")
+
+    # Iterate over fields
+    while IFS= read -r field; do
+        # Extract field type and name
+        field_type=$(echo "$field" | awk '{print $1}')
+        field_name=$(echo "$field" | awk '{print toupper(substr($2,1,1)) substr($2,2)}')
+
+        # Check field type and add validation annotations accordingly
+        case "$field_type" in
+            String)
+                echo "    @NotNull(message = \"$field_name cannot be null\")" >> "$create_request_file"
+                echo "    @NotBlank(message = \"$field_name cannot be blank\")" >> "$create_request_file"
+                ;;
+            Long|Integer|BigDecimal)
+                echo "    @Positive(message = \"$field_name must be a positive number\")" >> "$create_request_file"
+                echo "    @NotNull(message = \"$field_name cannot be null\")" >> "$create_request_file"
+                ;;
+            *)
+                # Leave other types without annotations
+                ;;
+        esac
+
+        # Add field declaration to the class without indentation and with semicolon
+        trimmed_field="${field:4}"  # Remove the first four characters
+        echo "    private ${trimmed_field};" >> "$create_request_file"
+        echo "" >> "$create_request_file"
+    done <<< "$fields"
+
+    # Close CreateRequest class
+    echo "}" >> "$create_request_file"
+}
+
+# Function to generate DTO Responses---------------------------------------------------------------------------------------------------------
+generate_response_dto() {
+    TARGET_DIR="$BASE_DIR/dto/response"
+    local model_file="$1"
+    local response_type="DtoResponse"
+    local model_name=$(basename "$model_file" .java)
+    if [[ $model_name == *Model ]]; then
+        model_name="${model_name%Model}"
+    fi
+    local lowercase_model_name=$(echo "$model_name" | tr '[:upper:]' '[:lower:]')
+    local dto_dir="$TARGET_DIR"
+    mkdir -p "$dto_dir"
+    create_response_file="$dto_dir/${model_name}${response_type}.java"
+
+    # Extract package name from the DTO directory structure
+    package_name=$(dirname "${create_response_file}" | sed 's|.*java/||; s|/|.|g')
+
+    # Add imports
+    echo "package $package_name;" > "$create_response_file"
+    echo "" >> "$create_response_file"
+
+    echo "import lombok.Data;" >> "$create_response_file" 
+    echo "import lombok.AllArgsConstructor;" >> "$create_response_file"
+    echo "import lombok.NoArgsConstructor;" >> "$create_response_file"
+    echo "" >> "$create_response_file"
+
+    if grep -q "LocalDateTime" "$model_file"; then
+        echo "import java.time.LocalDateTime;" >> "$create_response_file"
+    fi
+    if grep -q "BigDecimal" "$model_file"; then
+        echo "import java.math.BigDecimal;" >> "$create_response_file"
+    fi
+    echo "" >> "$create_response_file"
+
+    # Generate CreateRequest class
+    echo "@AllArgsConstructor" >> "$create_response_file"
+    echo "@NoArgsConstructor" >> "$create_response_file"
+    echo "@Data" >> "$create_response_file"
+    echo "public class $(basename "$create_response_file" .java) {" >> "$create_response_file"
+
+    # Extract fields from the original model class, excluding id field and LocalDateTime type
+    fields=$(grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/')
+
+    # Iterate over fields
+    while IFS= read -r field; do
+        # Extract field type and name
+        field_type=$(echo "$field" | awk '{print $1}')
+        field_name=$(echo "$field" | awk '{print toupper(substr($2,1,1)) substr($2,2)}')
+
+        # Add field declaration to the class without indentation and with semicolon
+        trimmed_field="${field:4}"  # Remove the first four characters
+        echo "    private ${trimmed_field};" >> "$create_response_file"
+        echo "" >> "$create_response_file"
+    done <<< "$fields"
+
+    # Close CreateRequest class
+    echo "}" >> "$create_response_file"
+}
+# Iterate over all Java files in the models directory
+for model_file in "$MODELS_DIR"/*.java; do
+    generate_reqest_dto "$model_file" "$request_type"
+done
+echo "DTO Requests generated successfully"
+
+
+for model_file in "$MODELS_DIR"/*.java; do
+    generate_response_dto "$model_file" "$response_type"
+done
+echo "DTO Responses generated successfully"
+
+echo ""
+echo "Now adjust your DTOs before running the next script"
+read -p "Do you want to continue? (Y/n): " choice
+
+# Check if the choice is 'y' or 'Y', then continue
+if ! [[ "$choice" =~ ^[Yy]$ ]]; then
+    exit 1
+fi
+
 # Function to generate DTO mappers---------------------------------------------------------------------------------------------------------
 generate_dto_mapper() {
     local model_name="$1"
@@ -289,6 +445,11 @@ generate_service_impl_class() {
     local service_impl_file="$SERVICE_IMPL_DIR/${model_name}ServiceImpl.java"
     package_name=$(dirname "${service_impl_file}" | sed 's|.*java/||; s|/|.|g')
 
+    # Get the type of id
+    id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
+    private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
+    id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
+
     # Add imports for model class and service interface
     echo "package $package_name;" > "$service_impl_file"
     echo "" >> "$service_impl_file"
@@ -306,7 +467,7 @@ generate_service_impl_class() {
     echo "public class ${model_name}ServiceImpl implements ${model_name}Service {" >> "$service_impl_file"
     echo "    private final ${model_name}Repository ${lowercase_model_name}Repository;" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
-    echo "    public NotificationChannelServiceImpl(${model_name}Repository ${lowercase_model_name}Repository) {" >> "$service_impl_file"
+    echo "    public ${model_name}ServiceImpl(${model_name}Repository ${lowercase_model_name}Repository) {" >> "$service_impl_file"
     echo "        this.${lowercase_model_name}Repository = ${lowercase_model_name}Repository;" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
@@ -376,9 +537,12 @@ generate_controller() {
     local controller_file="$CONTROLLER_DIR/${model_name}Controller.java"
     local lowercase_controller_name="${model_name}Controller"
     local request_model_name="$(echo "$lowercase_model_name" | sed 's/\([A-Z]\)/-\1/g' | tr '[:upper:]' '[:lower:]')"
-
-
     package_name=$(dirname "${controller_file}" | sed 's|.*java/||; s|/|.|g')
+
+    # Get the type of id
+    id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
+    private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
+    id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
 
     # Add imports for model class and service interface
     echo "package ${package_name};" > "$controller_file"
@@ -413,14 +577,14 @@ generate_controller() {
     echo "" >> "$controller_file"
     # Create get method
     echo "    @GetMapping(\"/{id}\")" >> "$controller_file"
-    echo "    public ResponseEntity<${model_name}DtoResponse> get${model_name}(@PathVariable(\"id\") String id) {" >> "$controller_file"
+    echo "    public ResponseEntity<${model_name}DtoResponse> get${model_name}(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
     echo "        ${class_name} ${lowercase_model_name} = ${lowercase_model_name}Service.getById(id);" >> "$controller_file"
     echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.OK);" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "" >> "$controller_file"
     # Create update method
     echo "    @PutMapping(\"/{id}\")" >> "$controller_file"
-    echo "    public ResponseEntity<${model_name}DtoResponse> update${model_name}(@PathVariable(\"id\") String id, @RequestBody ${model_name}DtoRequest ${lowercase_model_name}DtoRequest) {" >> "$controller_file"
+    echo "    public ResponseEntity<${model_name}DtoResponse> update${model_name}(@PathVariable(\"id\") ${id_type} id, @RequestBody ${model_name}DtoRequest ${lowercase_model_name}DtoRequest) {" >> "$controller_file"
     echo "        ${class_name} ${lowercase_model_name} = ${model_name}DtoMapper.toModel(${lowercase_model_name}DtoRequest);" >> "$controller_file"
     echo "        ${lowercase_model_name} = ${lowercase_model_name}Service.update(id, ${lowercase_model_name});" >> "$controller_file"
     echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.CREATED);" >> "$controller_file"
@@ -428,7 +592,7 @@ generate_controller() {
     echo "" >> "$controller_file"
     # Create delete method
     echo "    @DeleteMapping(\"/{id}\")" >> "$controller_file"
-    echo "    public ResponseEntity<Boolean> delete${model_name}(@PathVariable(\"id\") String id) {" >> "$controller_file"
+    echo "    public ResponseEntity<Boolean> delete${model_name}(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
     echo "        return new ResponseEntity<>(${lowercase_model_name}Service.deleteById(id), HttpStatus.NO_CONTENT);" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "}" >> "$controller_file"
