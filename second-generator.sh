@@ -14,6 +14,8 @@ fi
 # Find the directory containing the model directory
 BASE_DIR=$(find src -type d -name "model" -printf "%h\n" | head -n 1)
 
+TEST_BASE_DIR=$(echo "$BASE_DIR" | sed 's/main/test/')
+
 # Check if model directory is found
 if [ -z "$BASE_DIR" ]; then
     echo "Error: 'model' directory not found in 'src'"
@@ -449,3 +451,4 @@ for model_file in "$MODELS_DIR"/*.java; do
     fi
 done
 echo "Controllers generated successfully"
+

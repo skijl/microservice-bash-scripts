@@ -553,6 +553,8 @@ generate_controller() {
     echo "import $base_package_name.dto.response.${model_name}DtoResponse;" >> "$controller_file"
     echo "import $base_package_name.model.$class_name;" >> "$controller_file"
     echo "import $base_package_name.service.impl.${model_name}ServiceImpl;" >> "$controller_file"
+    echo "import io.swagger.v3.oas.annotations.Operation;" >> "$controller_file"
+    echo "import io.swagger.v3.oas.annotations.responses.ApiResponse;" >> "$controller_file"
     echo "import org.springframework.http.HttpStatus;" >>"$controller_file"
     echo "import org.springframework.http.ResponseEntity;" >> "$controller_file"
     echo "import org.springframework.web.bind.annotation.*;" >> "$controller_file"
@@ -569,6 +571,10 @@ generate_controller() {
     
     # Create create method
     echo "    @PostMapping" >> "$controller_file"
+    echo "    @Operation(summary = \"Create an ${lowercase_model_name}\", description = \"Create new ${lowercase_model_name}\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"201\", description = \"${model_name} saved successfully\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"400\", description = \"Invalid input\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"404\", description = \"Invalid foreign key that is not found\")" >> "$controller_file"
     echo "    public ResponseEntity<${model_name}DtoResponse> create${model_name}(@RequestBody ${model_name}DtoRequest ${lowercase_model_name}DtoRequest) {" >> "$controller_file"
     echo "        ${class_name} ${lowercase_model_name} = ${model_name}DtoMapper.toModel(${lowercase_model_name}DtoRequest);" >> "$controller_file"
     echo "        ${lowercase_model_name} = ${lowercase_model_name}Service.create(${lowercase_model_name});" >> "$controller_file"
@@ -577,6 +583,9 @@ generate_controller() {
     echo "" >> "$controller_file"
     # Create get method
     echo "    @GetMapping(\"/{id}\")" >> "$controller_file"
+    echo "    @Operation(summary = \"Get ${model_name}\", description = \"Get ${model_name} By Id\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"200\", description = \"${model_name} Get successfully\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"404\", description = \"${model_name} with such an Id not found\")" >> "$controller_file"
     echo "    public ResponseEntity<${model_name}DtoResponse> get${model_name}(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
     echo "        ${class_name} ${lowercase_model_name} = ${lowercase_model_name}Service.getById(id);" >> "$controller_file"
     echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.OK);" >> "$controller_file"
@@ -584,6 +593,10 @@ generate_controller() {
     echo "" >> "$controller_file"
     # Create update method
     echo "    @PutMapping(\"/{id}\")" >> "$controller_file"
+    echo "    @Operation(summary = \"Update an ${lowercase_model_name}\", description = \"Update an ${lowercase_model_name} by Id and new ${model_name}\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"201\", description = \"${model_name} updated successfully\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"400\", description = \"Invalid input\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"404\", description = \"${model_name} with such an Id not found or invalid foreign key that is not found\")" >> "$controller_file"
     echo "    public ResponseEntity<${model_name}DtoResponse> update${model_name}(@PathVariable(\"id\") ${id_type} id, @RequestBody ${model_name}DtoRequest ${lowercase_model_name}DtoRequest) {" >> "$controller_file"
     echo "        ${class_name} ${lowercase_model_name} = ${model_name}DtoMapper.toModel(${lowercase_model_name}DtoRequest);" >> "$controller_file"
     echo "        ${lowercase_model_name} = ${lowercase_model_name}Service.update(id, ${lowercase_model_name});" >> "$controller_file"
@@ -592,6 +605,8 @@ generate_controller() {
     echo "" >> "$controller_file"
     # Create delete method
     echo "    @DeleteMapping(\"/{id}\")" >> "$controller_file"
+    echo "    @Operation(summary = \"Delete an ${lowercase_model_name}\", description = \"Delete an ${lowercase_model_name} by id\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"204\", description = \"${model_name} deleted successfully\")" >> "$controller_file"
     echo "    public ResponseEntity<Boolean> delete${model_name}(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
     echo "        return new ResponseEntity<>(${lowercase_model_name}Service.deleteById(id), HttpStatus.NO_CONTENT);" >> "$controller_file"
     echo "    }" >> "$controller_file"
