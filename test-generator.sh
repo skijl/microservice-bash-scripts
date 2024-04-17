@@ -82,7 +82,7 @@ create_static_object_classes() {
             "String") echo "    public static final ${id_type} ID = \"${id_name}\";" >> "$static_file" ;;
             "Long") echo "    public static final ${id_type} ID = 1L;" >> "$static_file" ;;
             "Integer") echo "    public static final ${id_type} ID = 1;" >> "$static_file" ;;
-            *) echo "    public static final ${id_type} ID = " ;;
+            *) echo "    public static final ${id_type} ID = null" ;;
         esac
 
     echo "" >> "$static_file"
@@ -98,7 +98,7 @@ create_static_object_classes() {
             "Integer") echo "        model.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        model.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        model.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) echo "        model.set${field_name^}()" ;;
+            *) echo "        model.set${field_name^}(null);" ;;
         esac
     done
     echo "        return model;" >> "$static_file"
@@ -117,7 +117,7 @@ create_static_object_classes() {
             "Integer") echo "        model.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        model.set${field_name^}(new BigDecimal(20));" >> "$static_file" ;;
             "LocalDateTime") echo "        model.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) echo "        model.set${field_name^}()" ;;
+            *) echo "        model.set${field_name^}(null);" ;;
         esac
     done
     echo "        return model;" >> "$static_file"
@@ -136,7 +136,7 @@ create_static_object_classes() {
             "Integer") echo "        dtoRequest.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        dtoRequest.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        dtoRequest.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) ;;
+            *) echo "        model.set${field_name^}(null);" ;;;
         esac
     done
     echo "        return dtoRequest;" >> "$static_file"
@@ -155,7 +155,7 @@ create_static_object_classes() {
             "Integer") echo "        dtoResponse.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        dtoResponse.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        dtoResponse.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) ;;
+            *) echo "        model.set${field_name^}(null);" ;;
         esac
     done
     echo "        return dtoResponse;" >> "$static_file"
