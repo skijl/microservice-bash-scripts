@@ -82,7 +82,7 @@ create_static_object_classes() {
             "String") echo "    public static final ${id_type} ID = \"${id_name}\";" >> "$static_file" ;;
             "Long") echo "    public static final ${id_type} ID = 1L;" >> "$static_file" ;;
             "Integer") echo "    public static final ${id_type} ID = 1;" >> "$static_file" ;;
-            *) ;;
+            *) echo "    public static final ${id_type} ID = " ;;
         esac
 
     echo "" >> "$static_file"
@@ -98,7 +98,26 @@ create_static_object_classes() {
             "Integer") echo "        model.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        model.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        model.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) ;;
+            *) echo "        model.set${field_name^}()" ;;
+        esac
+    done
+    echo "        return model;" >> "$static_file"
+    echo "    }" >> "$static_file"
+
+     echo "" >> "$static_file"
+    echo "    public static ${class_name} ${lowercase_model_name}1() {" >> "$static_file"
+    echo "        ${class_name} model = new ${class_name}();" >> "$static_file"
+    # Map the fields from model
+    grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/' | while read -r field; do
+        field_type=$(echo "$field" | awk '{print $1}')
+        field_name=$(echo "$field" | awk '{print $2}')
+        case "$field_type" in
+            "String") echo "        model.set${field_name^}(\"$field_name\");" >> "$static_file" ;;
+            "Long") echo "        model.set${field_name^}(1L);" >> "$static_file" ;;
+            "Integer") echo "        model.set${field_name^}(1);" >> "$static_file" ;;
+            "BigDecimal") echo "        model.set${field_name^}(new BigDecimal(20));" >> "$static_file" ;;
+            "LocalDateTime") echo "        model.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
+            *) echo "        model.set${field_name^}()" ;;
         esac
     done
     echo "        return model;" >> "$static_file"
