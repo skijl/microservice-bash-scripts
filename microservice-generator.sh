@@ -26,6 +26,28 @@ MODELS_DIR="$BASE_DIR/model"
 # For imports
 base_package_name=$(echo "$BASE_DIR" | sed 's|.*java/||; s|/|.|g')
 
+# Get type of Id
+getIdType() {
+    model_file=$(find "$MODELS_DIR" -maxdepth 1 -type f -name "*.java" -print -quit)
+    if [ -n "$model_file" ]; then
+        if [ ! -z "$1" ]; then
+            model_file="$MODELS_DIR/$1.java"
+            id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
+            private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
+            id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
+            echo "$id_type"
+        else
+            id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
+            private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
+            id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
+            echo "$id_type"
+        fi
+    else
+        echo "No models are detected in /model dir"
+        exit 1
+    fi
+}
+
 # Function to generate DTO Requests---------------------------------------------------------------------------------------------------------
 generate_reqest_dto() {
     TARGET_DIR="$BASE_DIR/dto/request"
@@ -76,17 +98,39 @@ generate_reqest_dto() {
     while IFS= read -r field; do
         # Extract field type and name
         field_type=$(echo "$field" | awk '{print $1}')
-        field_name=$(echo "$field" | awk '{print toupper(substr($2,1,1)) substr($2,2)}')
+        field_name=$(echo "$field" | awk '{print (substr($2,1,1)) substr($2,2)}')
+        upper_field_name=$(echo "${field_name}" | sed -E 's/(^|[^A-Za-z])[a-z]/\U&/g' | sed -E 's/([A-Z])/ \1/g' | sed -E 's/^[[:space:]]+//')
+
+        case $field_type in
+        String|Long|Integer|BigDecimal)
+            ;;
+        *)
+            if [[ $field_name == *Model ]]; then
+                field_name="${field_name%Model}"
+            fi
+            if [ -f "$MODELS_DIR/$field_type.java" ]; then
+                local id_type=$(getIdType "$field_type")
+                if [ -n "$id_type" ]; then
+                    field_type="$id_type"
+                    field_name="${field_name}Id"
+                else
+                    field_type="String"
+                fi
+            else
+                field_type="String"
+            fi
+            ;;
+        esac
 
         # Check field type and add validation annotations accordingly
         case "$field_type" in
             String)
-                echo "    @NotNull(message = \"$field_name cannot be null\")" >> "$create_request_file"
-                echo "    @NotBlank(message = \"$field_name cannot be blank\")" >> "$create_request_file"
+                echo "    @NotNull(message = \"$upper_field_name cannot be null\")" >> "$create_request_file"
+                echo "    @NotBlank(message = \"$upper_field_name cannot be blank\")" >> "$create_request_file"
                 ;;
             Long|Integer|BigDecimal)
-                echo "    @Positive(message = \"$field_name must be a positive number\")" >> "$create_request_file"
-                echo "    @NotNull(message = \"$field_name cannot be null\")" >> "$create_request_file"
+                echo "    @Positive(message = \"$upper_field_name must be a positive number\")" >> "$create_request_file"
+                echo "    @NotNull(message = \"$upper_field_name cannot be null\")" >> "$create_request_file"
                 ;;
             *)
                 # Leave other types without annotations
@@ -94,8 +138,7 @@ generate_reqest_dto() {
         esac
 
         # Add field declaration to the class without indentation and with semicolon
-        trimmed_field="${field:4}"  # Remove the first four characters
-        echo "    private ${trimmed_field};" >> "$create_request_file"
+        echo "    private ${field_type} ${field_name};" >> "$create_request_file"
         echo "" >> "$create_request_file"
     done <<< "$fields"
 
@@ -137,7 +180,7 @@ generate_response_dto() {
     fi
     echo "" >> "$create_response_file"
 
-    # Generate CreateRequest class
+    # Generate CreateResponse class
     echo "@AllArgsConstructor" >> "$create_response_file"
     echo "@NoArgsConstructor" >> "$create_response_file"
     echo "@Data" >> "$create_response_file"
@@ -150,11 +193,25 @@ generate_response_dto() {
     while IFS= read -r field; do
         # Extract field type and name
         field_type=$(echo "$field" | awk '{print $1}')
-        field_name=$(echo "$field" | awk '{print toupper(substr($2,1,1)) substr($2,2)}')
+        field_name=$(echo "$field" | awk '{print $2}')
+
+        case $field_type in
+        String|Long|Integer|BigDecimal)
+            ;;
+        *)
+            if [[ $field_name == *Model ]]; then
+                field_name="${field_name%Model}"
+            fi
+            if [ -f "$MODELS_DIR/$field_type.java" ]; then
+                if [[ $field_type == *Model ]]; then
+                    field_type="${field_type%Model}" # Update field_type without '$'
+                fi
+                field_type="${field_type}DtoResponse"
+            fi
+        esac
 
         # Add field declaration to the class without indentation and with semicolon
-        trimmed_field="${field:4}"  # Remove the first four characters
-        echo "    private ${trimmed_field};" >> "$create_response_file"
+        echo "    private ${field_type} ${field_name};" >> "$create_response_file"
         echo "" >> "$create_response_file"
     done <<< "$fields"
 
@@ -216,10 +273,22 @@ generate_dto_mapper() {
     echo "" >> "$create_mapper_file"
     # Iterate over fields in the model
     grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/' | while read -r field; do
+        field_type=$(echo "$field" | awk '{print $1}')
         field_name=$(echo "$field" | awk '{print $2}')
+        full_field_name="$(echo "${field_name:0:1}" | tr '[:lower:]' '[:upper:]')${field_name:1}"
+        if [[ $field_name == *Model ]]; then
+            field_name="${field_name%Model}"
+        fi
         # Check if field exists in CreateRequest and map it
         if grep -q "private .* $field_name;" "$BASE_DIR/dto/request/${model_name}DtoRequest.java"; then
             echo "        model.set${field_name^}(request.get${field_name^}());" >> "$create_mapper_file"
+        elif grep -q "private .* ${field_name}Id;" "$BASE_DIR/dto/request/${model_name}DtoRequest.java"; then
+            lower_field_type="$(echo "${field_name:0:1}" | tr '[:upper:]' '[:lower:]')${field_name:1}"
+            field_name="$(echo "${field_name:0:1}" | tr '[:lower:]' '[:upper:]')${field_name:1}"
+            echo "        ${field_type} ${lower_field_type} = new ${field_type}();" >> "$create_mapper_file"
+            echo "        ${lower_field_type}.setId(request.get${field_name}Id());" >> "$create_mapper_file"
+            echo "        model.set${full_field_name}(${lower_field_type});" >> "$create_mapper_file"
+            sed -i "3i\import $base_package_name.model.${field_type};" "$create_mapper_file"
         fi
     done
     echo "" >> "$create_mapper_file"
@@ -233,10 +302,22 @@ generate_dto_mapper() {
     echo "" >> "$create_mapper_file"
     # Iterate over fields in the model
     grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/' | while read -r field; do
+        field_type=$(echo "$field" | awk '{print $1}')
         field_name=$(echo "$field" | awk '{print $2}')
         # Check if field exists in CreateResponse and map it
-        if grep -q "private .* $field_name;" "$BASE_DIR/dto/response/${model_name}DtoResponse.java"; then
+        if grep -q "private $field_type $field_name;" "$BASE_DIR/dto/response/${model_name}DtoResponse.java"; then
             echo "        response.set${field_name^}(model.get${field_name^}());" >> "$create_mapper_file"
+        else 
+            field_type=$(echo "$field" | awk '{print $1}')
+            if [[ $field_type == *Model ]]; then
+                field_type="${field_type%Model}"
+            fi
+            field_name="$(echo "${field_name:0:1}" | tr '[:lower:]' '[:upper:]')${field_name:1}"
+            response_field_name=$(grep "private ${field_type}DtoResponse .*;" "$BASE_DIR/dto/response/${model_name}DtoResponse.java" | sed -E 's/private '${field_type}'DtoResponse (.+?);/\1/' | sed -E 's/.{3}//' | sed 's/./\U&/' | sed 's/^.//')
+            response_field_name="$(echo "${response_field_name:0:1}" | tr '[:lower:]' '[:upper:]')${response_field_name:1}"
+            if grep -q "private ${field_type}DtoResponse .*;" "$BASE_DIR/dto/response/${model_name}DtoResponse.java"; then
+                echo "        response.set${response_field_name}(${field_type}DtoMapper.toResponse(model.get${field_name}()));" >> "$create_mapper_file"
+            fi
         fi
     done
     echo "" >> "$create_mapper_file"
@@ -301,7 +382,6 @@ generate_repository() {
     echo "}" >> "$repository_file"
 }
 
-
 # Iterate over all Java files in the models directory
 for model_file in "$MODELS_DIR"/*.java; do
     model_name=$(basename "$model_file" .java)
@@ -317,49 +397,35 @@ echo "Repository interfaces generated successfully."
 
 # Function to generate service interface---------------------------------------------------------------------------------------------------------
 generate_service_interface() {
-    local model_name="$1"
-    local class_name="$1"
-    if [ $# -eq 2 ]; then
-        model_name="$2"  # Set model_name to second argument
-    fi
-
-    local lowercase_model_name="${model_name,}"
-    local service_file="$BASE_DIR/service/${model_name}Service.java"
+    id_type=$1
+    local service_file="$BASE_DIR/service/CrudService.java"
     package_name=$(dirname "${service_file}" | sed 's|.*java/||; s|/|.|g')
 
     # Add package and imports for model class
     echo "package $package_name;" > "$service_file"
     echo "" >> "$service_file"
-    echo "import $base_package_name.model.$class_name;" >> "$service_file"
-    echo "" >> "$service_file"
-
-    # Get the type of id
-    id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
-    private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
-    id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
 
     # Generate service interface
-    echo "public interface ${model_name}Service {" >> "$service_file"
-    echo "    public $class_name create($class_name $lowercase_model_name);" >> "$service_file"
-    echo "    public $class_name getById($id_type id);" >> "$service_file"
-    echo "    public $class_name update($id_type id, $class_name $lowercase_model_name);" >> "$service_file"
+    echo "public interface CrudService<T> {" >> "$service_file"
+    echo "    public T create(T model);" >> "$service_file"
+    echo "    public T getById($id_type id);" >> "$service_file"
+    echo "    public T update($id_type id, T model);" >> "$service_file"
     echo "    public Boolean deleteById($id_type id);" >> "$service_file"
     echo "}" >> "$service_file"
 }
 
 mkdir -p "$BASE_DIR/service"
-
-# Iterate over all Java files in the models directory
-for model_file in "$MODELS_DIR"/*.java; do
-    model_name=$(basename "$model_file" .java)
-    if [[ $model_name == *Model ]]; then
-        model_name_without_suffix="${model_name%Model}"
-        generate_service_interface "$model_name" "$model_name_without_suffix"
-    else
-        generate_service_interface "$model_name"
-    fi
-done
-
+{
+# Find the first Java file in the models directory
+model_file=$(find "$MODELS_DIR" -maxdepth 1 -type f -name "*.java" -print -quit)
+if [ -n "$model_file" ]; then
+    # Get the type of id
+    id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
+    private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
+    id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
+    generate_service_interface $id_type
+fi
+}
 echo "Service interfaces generated successfully."
 # Function to generate exception package and exceptions---------------------------------------------------------------------------------------------------------
 generate_exceptions_package(){
@@ -453,10 +519,10 @@ generate_service_impl_class() {
     # Add imports for model class and service interface
     echo "package $package_name;" > "$service_impl_file"
     echo "" >> "$service_impl_file"
-    echo "import $base_package_name.model.$class_name;" >> "$service_impl_file"
-    echo "import $base_package_name.service.${model_name}Service;" >> "$service_impl_file"
     echo "import $base_package_name.exception.EntityNotFoundException;" >> "$service_impl_file"
+    echo "import $base_package_name.model.$class_name;" >> "$service_impl_file"
     echo "import $base_package_name.repository.${model_name}Repository;" >> "$service_impl_file"
+    echo "import $base_package_name.service.CrudService;" >> "$service_impl_file"
     echo "import lombok.extern.slf4j.Slf4j;" >> "$service_impl_file"
     echo "import org.springframework.stereotype.Service;" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
@@ -464,7 +530,7 @@ generate_service_impl_class() {
     # Generate service implementation class
     echo "@Slf4j" >> "$service_impl_file"
     echo "@Service" >> "$service_impl_file"
-    echo "public class ${model_name}ServiceImpl implements ${model_name}Service {" >> "$service_impl_file"
+    echo "public class ${model_name}ServiceImpl implements CrudService<${class_name}> {" >> "$service_impl_file"
     echo "    private final ${model_name}Repository ${lowercase_model_name}Repository;" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
     echo "    public ${model_name}ServiceImpl(${model_name}Repository ${lowercase_model_name}Repository) {" >> "$service_impl_file"
@@ -475,6 +541,15 @@ generate_service_impl_class() {
     echo "    @Override" >> "$service_impl_file"
     echo "    public $class_name create($class_name $lowercase_model_name) {" >> "$service_impl_file"
     echo "        log.info(\"$class_name create: {}\", $lowercase_model_name);" >> "$service_impl_file"
+    lines=$(sed '/}/q' "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java")
+    
+    # Filter lines containing 'model.set' and extract words before '('
+    #words=($(awk '/model\.set/ && NR>2 && prevLine~/= new/ { match($0, /model\.set([^(]+)/, arr); print arr[1] }' "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java"))
+    #echo $words
+    # Loop through the extracted words and construct the desired output
+    # for word in "${words[@]}"; do
+    #     echo "        $lowercase_model_name.set$word(getById($lowercase_model_name.get$word.getId()))" >> "$service_impl_file" 
+    # done
     echo "        return ${lowercase_model_name}Repository.save($lowercase_model_name);" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
