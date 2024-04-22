@@ -102,7 +102,7 @@ generate_reqest_dto() {
         upper_field_name=$(echo "${field_name}" | sed -E 's/(^|[^A-Za-z])[a-z]/\U&/g' | sed -E 's/([A-Z])/ \1/g' | sed -E 's/^[[:space:]]+//')
 
         case $field_type in
-        String|Long|Integer|BigDecimal)
+        String|Long|Integer|BigDecimal|Double)
             ;;
         *)
             if [[ $field_name == *Model ]]; then
@@ -128,7 +128,7 @@ generate_reqest_dto() {
                 echo "    @NotNull(message = \"$upper_field_name cannot be null\")" >> "$create_request_file"
                 echo "    @NotBlank(message = \"$upper_field_name cannot be blank\")" >> "$create_request_file"
                 ;;
-            Long|Integer|BigDecimal)
+            Long|Integer|BigDecimal|Double)
                 echo "    @Positive(message = \"$upper_field_name must be a positive number\")" >> "$create_request_file"
                 echo "    @NotNull(message = \"$upper_field_name cannot be null\")" >> "$create_request_file"
                 ;;
@@ -196,7 +196,7 @@ generate_response_dto() {
         field_name=$(echo "$field" | awk '{print $2}')
 
         case $field_type in
-        String|Long|Integer|BigDecimal)
+        String|Long|Integer|BigDecimal|Double)
             ;;
         *)
             if [[ $field_name == *Model ]]; then
@@ -396,7 +396,7 @@ done
 echo "Repository interfaces generated successfully."
 
 # Function to generate service interface---------------------------------------------------------------------------------------------------------
-generate_service_interface() {
+generate_crud_service_interface() {
     id_type=$1
     local service_file="$BASE_DIR/service/CrudService.java"
     package_name=$(dirname "${service_file}" | sed 's|.*java/||; s|/|.|g')
@@ -423,9 +423,51 @@ if [ -n "$model_file" ]; then
     id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
     private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
     id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
-    generate_service_interface $id_type
+    generate_crud_service_interface $id_type
 fi
 }
+
+# Function to generate service interface---------------------------------------------------------------------------------------------------------
+generate_service_interface() {
+    local model_name="$1"
+    local class_name="$1"
+    if [ $# -eq 2 ]; then
+        model_name="$2"  # Set model_name to second argument
+    fi
+
+    local lowercase_model_name="${model_name,}"
+    local service_file="$BASE_DIR/service/${model_name}Service.java"
+    package_name=$(dirname "${service_file}" | sed 's|.*java/||; s|/|.|g')
+
+    # Add package and imports for model class
+    echo "package $package_name;" > "$service_file"
+    echo "" >> "$service_file"
+    echo "import $base_package_name.model.$class_name;" >> "$service_file"
+    echo "" >> "$service_file"
+
+    # Get the type of id
+    id_line=$(grep -n "@Id" "$model_file" | head -n 1 | cut -d ":" -f 1)
+    private_line=$(awk "NR > $id_line && /private/ {print NR; exit}" "$model_file")
+    id_type=$(awk "NR==$private_line" "$model_file" | awk '{print $2}')
+
+    # Generate service interface
+    echo "public interface ${model_name}Service extends CrudService<${class_name}>{" >> "$service_file"
+    echo "" >> "$service_file"
+    echo "}" >> "$service_file"
+}
+
+mkdir -p "$BASE_DIR/service"
+
+# Iterate over all Java files in the models directory
+for model_file in "$MODELS_DIR"/*.java; do
+    model_name=$(basename "$model_file" .java)
+    if [[ $model_name == *Model ]]; then
+        model_name_without_suffix="${model_name%Model}"
+        generate_service_interface "$model_name" "$model_name_without_suffix"
+    else
+        generate_service_interface "$model_name"
+    fi
+done
 echo "Service interfaces generated successfully."
 # Function to generate exception package and exceptions---------------------------------------------------------------------------------------------------------
 generate_exceptions_package(){
@@ -522,7 +564,7 @@ generate_service_impl_class() {
     echo "import $base_package_name.exception.EntityNotFoundException;" >> "$service_impl_file"
     echo "import $base_package_name.model.$class_name;" >> "$service_impl_file"
     echo "import $base_package_name.repository.${model_name}Repository;" >> "$service_impl_file"
-    echo "import $base_package_name.service.CrudService;" >> "$service_impl_file"
+    echo "import $base_package_name.service.${model_name}Service;" >> "$service_impl_file"
     echo "import lombok.extern.slf4j.Slf4j;" >> "$service_impl_file"
     echo "import org.springframework.stereotype.Service;" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
@@ -530,7 +572,7 @@ generate_service_impl_class() {
     # Generate service implementation class
     echo "@Slf4j" >> "$service_impl_file"
     echo "@Service" >> "$service_impl_file"
-    echo "public class ${model_name}ServiceImpl implements CrudService<${class_name}> {" >> "$service_impl_file"
+    echo "public class ${model_name}ServiceImpl implements ${model_name}Service {" >> "$service_impl_file"
     echo "    private final ${model_name}Repository ${lowercase_model_name}Repository;" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
     echo "    public ${model_name}ServiceImpl(${model_name}Repository ${lowercase_model_name}Repository) {" >> "$service_impl_file"
@@ -541,15 +583,112 @@ generate_service_impl_class() {
     echo "    @Override" >> "$service_impl_file"
     echo "    public $class_name create($class_name $lowercase_model_name) {" >> "$service_impl_file"
     echo "        log.info(\"$class_name create: {}\", $lowercase_model_name);" >> "$service_impl_file"
-    lines=$(sed '/}/q' "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java")
-    
-    # Filter lines containing 'model.set' and extract words before '('
-    #words=($(awk '/model\.set/ && NR>2 && prevLine~/= new/ { match($0, /model\.set([^(]+)/, arr); print arr[1] }' "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java"))
-    #echo $words
-    # Loop through the extracted words and construct the desired output
-    # for word in "${words[@]}"; do
-    #     echo "        $lowercase_model_name.set$word(getById($lowercase_model_name.get$word.getId()))" >> "$service_impl_file" 
-    # done
+
+
+    # Pattern to match
+    pattern="model.set"
+
+    # Flag to track the conditions
+    preprevious_line_is_new=false
+    previous_line_is_new=false
+    previous_line_is_not_empty=false
+
+    service=
+    # Read the input file line by line
+    while IFS= read -r line; do
+        # Check if the current line matches the pattern
+        if [[ $line == *"$pattern"* ]]; then
+            # Extract the object before "(" sign
+            object=$(echo "$line" | awk -F"$pattern" '{print $2}' | awk -F'(' '{print $1}')
+            # Check the conditions for appending to the output file
+            if $previous_line_is_not_empty && $preprevious_line_is_new; then
+                service_name="$(echo "${service:0:1}" | tr '[:upper:]' '[:lower:]')${service:1}"
+                echo "        ${lowercase_model_name}.set$object(${service_name}.getById(${lowercase_model_name}.get$object().getId()));" >> "$service_impl_file"
+                
+                # Temporary file to store modified content
+                temp_file=$(mktemp)
+
+                # Flag to track whether we've encountered 'public' keyword
+                public_encountered=false
+
+                # Flag to track whether we're inside the class definition
+                inside_class=false
+                # Read the file line by line
+                while IFS= read -r line; do
+                    change_line=false
+                    # Check if we've encountered the class definition
+                    if [[ $line == *"public class"* ]]; then
+                        inside_class=true
+                    fi
+                    if [[ $line == "import lombok.extern.slf4j.Slf4j;" ]]; then
+                        echo "import $base_package_name.service.$service;" >> "$temp_file"
+                    fi
+                    
+                    # If we're inside the class definition
+                    if $inside_class; then
+                        # If we encounter an empty line
+                        if [[ -z "${line// }" ]]; then
+                            # Add new line
+                            echo "    private final $service $service_name;" >> "$temp_file"
+                        fi
+                        
+                        # If we encounter 'public' keyword
+                        if [[ $line == *"public "* ]]; then
+                            # Set the flag to true
+                            public_encountered=true
+                        fi
+                        
+                        # If we've encountered 'public' and '('
+                        if $public_encountered && [[ $line == *"("* ]]; then
+                            before=$(echo "$line" | awk -F'(' '{print $1}')
+                            after=$(echo "$line" | awk -F'(' '{print $2}')
+
+                            # Add the line with '$service $service_name,'
+                            echo "$before($service $service_name, $after" >> "$temp_file"
+                            echo "        this.$service_name = $service_name;" >> "$temp_file"
+                            # Reset the flags
+                            public_encountered=false
+                            inside_class=false
+                            change_line=true
+                        fi
+                    fi
+                    
+                    # Write the original line to the temporary file
+                    if ! $change_line; then
+                        echo "$line" >> "$temp_file"
+                    fi
+                    
+                done < "$service_impl_file"
+
+                # Move the temporary file to the original file
+                mv "$temp_file" "$service_impl_file"
+
+            fi
+        fi
+        
+        # Update the flags for the next iteration
+        preprevious_line_is_new=$previous_line_is_new
+        previous_line_is_not_empty=true
+        
+        # Check if the current line is not empty
+        if [[ -z "${line// }" ]]; then
+            previous_line_is_not_empty=false
+        fi
+        
+        # Check if the current line contains '= new'
+        if [[ $line == *"= new"* ]]; then
+            service=$(echo "$line" | awk -F'        ' '{print $2}' | awk -F' ' '{print $1}')
+            if [[ $service == *Model ]]; then
+                service="${service%Model}"
+            fi
+            service="${service}Service"
+            previous_line_is_new=true
+        else
+            previous_line_is_new=false
+        fi
+    done < "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java"
+
+
     echo "        return ${lowercase_model_name}Repository.save($lowercase_model_name);" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
