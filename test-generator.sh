@@ -40,6 +40,7 @@ MODELS_DIR="$BASE_DIR/model"
 base_package_name=$(echo "$BASE_DIR" | sed 's|.*java/||; s|/|.|g')
 TEST_BASE_DIR=$(echo "$BASE_DIR" | sed 's/main/test/')
 
+mkdir -p "$TEST_BASE_DIR/staticObject"
 
 # Function to create StaticObject classes-------------------------------------------------------------------------
 create_static_object_classes() {
@@ -63,7 +64,7 @@ create_static_object_classes() {
     fi
 
     # Create Static<ModelName>.java
-    static_file="$static_object_dir/Static${model_name}.java"
+    static_file="$TEST_BASE_DIR/staticObject/Static${model_name}.java"
     echo "package ${base_package_name}.staticObject;" > "$static_file"
     echo "" >> "$static_file"
     echo "import ${base_package_name}.dto.request.${model_name}DtoRequest;" >> "$static_file"
@@ -98,7 +99,13 @@ create_static_object_classes() {
             "Integer") echo "        model.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        model.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        model.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) echo "        model.set${field_name^}(null);" >> "$static_file" ;;
+            "Double") echo "        model.set${field_name^}(10D);" >> "$static_file" ;;
+            *) 
+                if [[ $field_type == *Model ]]; then
+                    field_type="${field_type%Model}"
+                fi
+                lowercase_field_type=$(echo "${field_type:0:1}" | tr '[:upper:]' '[:lower:]')${field_type:1}
+                echo "        model.set${field_name^}(Static$field_type.${lowercase_field_type}1());"  >> "$static_file" ;;
         esac
     done
     echo "        return model;" >> "$static_file"
@@ -117,7 +124,13 @@ create_static_object_classes() {
             "Integer") echo "        model.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        model.set${field_name^}(new BigDecimal(20));" >> "$static_file" ;;
             "LocalDateTime") echo "        model.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) echo "        model.set${field_name^}(null);"  >> "$static_file" ;;
+            "Double") echo "        model.set${field_name^}(10D);" >> "$static_file" ;;
+            *) 
+                if [[ $field_type == *Model ]]; then
+                    field_type="${field_type%Model}"
+                fi
+                lowercase_field_type=$(echo "${field_type:0:1}" | tr '[:upper:]' '[:lower:]')${field_type:1}
+                echo "        model.set${field_name^}(Static$field_type.${lowercase_field_type}2());"  >> "$static_file" ;;
         esac
     done
     echo "        return model;" >> "$static_file"
@@ -136,7 +149,13 @@ create_static_object_classes() {
             "Integer") echo "        dtoRequest.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        dtoRequest.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        dtoRequest.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) echo "        dtoRequest.set${field_name^}(null);"  >> "$static_file" ;;
+            "Double") echo "        dtoRequest.set${field_name^}(10D);" >> "$static_file" ;;
+            *) 
+                if [[ $field_type == *DtoRequest ]]; then
+                    field_type="${field_type%DtoRequest}"
+                fi
+                lowercase_field_type=$(echo "${field_type:0:1}" | tr '[:upper:]' '[:lower:]')${field_type:1}
+                echo "        dtoResponse.set${field_name^}(Static$field_type.${lowercase_field_type1}DtoRequest());"  >> "$static_file" ;;
         esac
     done
     echo "        return dtoRequest;" >> "$static_file"
@@ -155,13 +174,17 @@ create_static_object_classes() {
             "Integer") echo "        dtoResponse.set${field_name^}(1);" >> "$static_file" ;;
             "BigDecimal") echo "        dtoResponse.set${field_name^}(new BigDecimal(10));" >> "$static_file" ;;
             "LocalDateTime") echo "        dtoResponse.set${field_name^}(LocalDateTime.MIN);" >> "$static_file" ;;
-            *) echo "        dtoResponse.set${field_name^}(null);"  >> "$static_file" ;;
+            "Double") echo "        dtoResponse.set${field_name^}(10D);" >> "$static_file" ;;
+            *)
+                if [[ $field_type == *DtoResponse ]]; then
+                    field_type="${field_type%DtoResponse}"
+                fi
+                lowercase_field_type=$(echo "${field_type:0:1}" | tr '[:upper:]' '[:lower:]')${field_type:1}
+                echo "        dtoResponse.set${field_name^}(Static$field_type.${lowercase_field_type}DtoResponse1());"  >> "$static_file" ;;
         esac
     done
     echo "        return dtoResponse;" >> "$static_file"
     echo "    }" >> "$static_file"
-    echo "" >> "$static_file"
-    echo "" >> "$static_file"
     echo "}" >> "$static_file"
 }
 
