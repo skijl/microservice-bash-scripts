@@ -404,11 +404,13 @@ generate_crud_service_interface() {
     # Add package and imports for model class
     echo "package $package_name;" > "$service_file"
     echo "" >> "$service_file"
-
+    echo "import java.util.List;" >> "$service_file"
+    echo "" >> "$service_file"
     # Generate service interface
     echo "public interface CrudService<T> {" >> "$service_file"
     echo "    public T create(T model);" >> "$service_file"
     echo "    public T getById($id_type id);" >> "$service_file"
+    echo "    public List<T> getAll();" >> "$service_file"
     echo "    public T update($id_type id, T model);" >> "$service_file"
     echo "    public Boolean deleteById($id_type id);" >> "$service_file"
     echo "}" >> "$service_file"
@@ -568,6 +570,8 @@ generate_service_impl_class() {
     echo "import lombok.extern.slf4j.Slf4j;" >> "$service_impl_file"
     echo "import org.springframework.stereotype.Service;" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
+    echo "import java.util.List;" >> "$service_impl_file"
+    echo "" >> "$service_impl_file"
 
     # Generate service implementation class
     echo "@Slf4j" >> "$service_impl_file"
@@ -688,7 +692,6 @@ generate_service_impl_class() {
         fi
     done < "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java"
 
-
     echo "        return ${lowercase_model_name}Repository.save($lowercase_model_name);" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
@@ -697,6 +700,13 @@ generate_service_impl_class() {
     echo "    public $class_name getById($id_type id) {" >> "$service_impl_file"
     echo "        log.info(\"$class_name get by id: {}\", id);" >> "$service_impl_file"
     echo "        return ${lowercase_model_name}Repository.findById(id).orElseThrow(()->new EntityNotFoundException(\"${model_name} with id: \" + id + \" does not exist\"));" >> "$service_impl_file"
+    echo "    }" >> "$service_impl_file"
+    echo "" >> "$service_impl_file"
+
+    echo "    @Override" >> "$service_impl_file"
+    echo "    public List<$class_name> getAll() {" >> "$service_impl_file"
+    echo "        log.info(\"$class_name get all\");" >> "$service_impl_file"
+    echo "        return ${lowercase_model_name}Repository.findAll();" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
 
@@ -774,6 +784,8 @@ generate_controller() {
     echo "import org.springframework.http.ResponseEntity;" >> "$controller_file"
     echo "import org.springframework.web.bind.annotation.*;" >> "$controller_file"
     echo "" >> "$controller_file"
+    echo "import java.util.List;" >> "$controller_file"
+    echo "" >> "$controller_file"
     echo "@RestController" >> "$controller_file"
     echo "@RequestMapping(\"/api/$request_model_name\")" >> "$controller_file"
     echo "public class ${model_name}Controller {" >> "$controller_file"
@@ -783,8 +795,7 @@ generate_controller() {
     echo "        this.${lowercase_model_name}Service = ${lowercase_model_name}Service;" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "" >> "$controller_file"
-    
-    # Create create method
+    # Create method
     echo "    @PostMapping" >> "$controller_file"
     echo "    @Operation(summary = \"Create an ${lowercase_model_name}\", description = \"Create new ${lowercase_model_name}\")" >> "$controller_file"
     echo "    @ApiResponse(responseCode = \"201\", description = \"${model_name} saved successfully\")" >> "$controller_file"
@@ -796,14 +807,23 @@ generate_controller() {
     echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.CREATED);" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "" >> "$controller_file"
-    # Create get method
+    # GetById method
     echo "    @GetMapping(\"/{id}\")" >> "$controller_file"
     echo "    @Operation(summary = \"Get ${model_name}\", description = \"Get ${model_name} By Id\")" >> "$controller_file"
     echo "    @ApiResponse(responseCode = \"200\", description = \"${model_name} Get successfully\")" >> "$controller_file"
     echo "    @ApiResponse(responseCode = \"404\", description = \"${model_name} with such an Id not found\")" >> "$controller_file"
-    echo "    public ResponseEntity<${model_name}DtoResponse> get${model_name}(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
+    echo "    public ResponseEntity<${model_name}DtoResponse> get${model_name}ById(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
     echo "        ${class_name} ${lowercase_model_name} = ${lowercase_model_name}Service.getById(id);" >> "$controller_file"
     echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.OK);" >> "$controller_file"
+    echo "    }" >> "$controller_file"
+    echo "" >> "$controller_file"
+    # GetAll method
+    echo "    @GetMapping(\"\")" >> "$controller_file"
+    echo "    @Operation(summary = \"Get All ${model_name}\", description = \"Get All ${model_name}\")" >> "$controller_file"
+    echo "    @ApiResponse(responseCode = \"200\", description = \"${model_name} Get All successfully\")" >> "$controller_file"
+    echo "    public ResponseEntity<List<${model_name}DtoResponse>> getAll${model_name}() {" >> "$controller_file"
+    echo "        List<${class_name}> ${lowercase_model_name}List = ${lowercase_model_name}Service.getAll();" >> "$controller_file"
+    echo "        return new ResponseEntity<>(${lowercase_model_name}List.stream().map(${model_name}DtoMapper::toResponse).toList(), HttpStatus.OK);" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "" >> "$controller_file"
     # Update method
@@ -818,7 +838,7 @@ generate_controller() {
     echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.CREATED);" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "" >> "$controller_file"
-    # Create delete method
+    # Delete method
     echo "    @DeleteMapping(\"/{id}\")" >> "$controller_file"
     echo "    @Operation(summary = \"Delete an ${lowercase_model_name}\", description = \"Delete an ${lowercase_model_name} by id\")" >> "$controller_file"
     echo "    @ApiResponse(responseCode = \"204\", description = \"${model_name} deleted successfully\")" >> "$controller_file"
