@@ -505,6 +505,7 @@ generate_exceptions_package(){
     echo "package $package_name;" > "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo "" >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo 'import org.springframework.beans.factory.annotation.Value;' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo 'import org.springframework.dao.DataAccessException;' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo 'import org.springframework.http.HttpStatus;' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo 'import org.springframework.http.ResponseEntity;' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo 'import org.springframework.validation.FieldError;' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
@@ -535,8 +536,13 @@ generate_exceptions_package(){
     echo '    }' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo '' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo '    @ExceptionHandler(EntityNotFoundException.class)' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
-    echo '    public ResponseEntity<Object> handlerElasticsearchNotFoundExceptionEntityNotFoundException(EntityNotFoundException e){' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo '    public ResponseEntity<Object> handlerEntityNotFoundException(EntityNotFoundException e){' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo '        return new ResponseEntity<>(new ExceptionPayload(e.getMessage(), DOCUMENTATION_URI), HttpStatus.NOT_FOUND);' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo '    }' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo '' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo '    @ExceptionHandler(DataAccessException.class)' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo '    public ResponseEntity<Object> handlerDataAccessException(DataAccessException e){' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
+    echo '        return new ResponseEntity<>(new ExceptionPayload(e.getMessage(), DOCUMENTATION_URI), HttpStatus.SERVICE_UNAVAILABLE);' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo '    }' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
     echo '}' >> "$EXCEPTION_DIR/GlobalExceptionHandler.java"
 }
@@ -597,6 +603,7 @@ generate_service_impl_class() {
     previous_line_is_new=false
     previous_line_is_not_empty=false
 
+    foreign_services=
     service=
     # Read the input file line by line
     while IFS= read -r line; do
@@ -607,11 +614,12 @@ generate_service_impl_class() {
             # Check the conditions for appending to the output file
             if $previous_line_is_not_empty && $preprevious_line_is_new; then
                 service_name="$(echo "${service:0:1}" | tr '[:upper:]' '[:lower:]')${service:1}"
-                echo "        ${lowercase_model_name}.set$object(${service_name}.getById(${lowercase_model_name}.get$object().getId()));" >> "$service_impl_file"
-                
+                if [ -n "$foreign_services" ]; then
+                    foreign_services="${foreign_services}\n"
+                fi
+                foreign_services=${foreign_services}"        ${lowercase_model_name}.set$object(${service_name}.getById(${lowercase_model_name}.get$object().getId()));"
                 # Temporary file to store modified content
                 temp_file=$(mktemp)
-
                 # Flag to track whether we've encountered 'public' keyword
                 public_encountered=false
 
@@ -691,7 +699,7 @@ generate_service_impl_class() {
             previous_line_is_new=false
         fi
     done < "$BASE_DIR/dto/dtoMapper/${model_name}DtoMapper.java"
-
+    echo -e "$foreign_services" >> "$service_impl_file"
     echo "        return ${lowercase_model_name}Repository.save($lowercase_model_name);" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
@@ -712,17 +720,19 @@ generate_service_impl_class() {
 
     echo "    @Override" >> "$service_impl_file"
     echo "    public $class_name update($id_type id, $class_name $lowercase_model_name) {" >> "$service_impl_file"
-    echo "        $class_name updated$model_name = getById(id);" >> "$service_impl_file"
-    # Map the fields from model to updatedModel
-    grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/' | while read -r field; do
-        field_name=$(echo "$field" | awk '{print $2}')
-        # Check if field exists in CreateRequest and map it
-        if grep -q "private .* $field_name;" "$BASE_DIR/dto/request/${model_name}DtoRequest.java"; then
-            echo "        updated$model_name.set${field_name^}($lowercase_model_name.get${field_name^}());" >> "$service_impl_file"
-        fi
-    done
-    echo "        log.info(\"$class_name update by id: {}\", updated$model_name);" >> "$service_impl_file"
-    echo "        return ${lowercase_model_name}Repository.save(updated$model_name);" >> "$service_impl_file"
+    echo "        getById(id);" >> "$service_impl_file"
+    echo "        $lowercase_model_name.setId(id);" >> "$service_impl_file"
+    echo -e "$foreign_services" >> "$service_impl_file"
+    # # Map the fields from model to updatedModel
+    # grep -E 'private .*;' "$model_file" | sed 's/private \([^ ]*\) \([^;]*\);/\1 \2/' | while read -r field; do
+    #     field_name=$(echo "$field" | awk '{print $2}')
+    #     # Check if field exists in CreateRequest and map it
+    #     if grep -q "private .* $field_name;" "$BASE_DIR/dto/request/${model_name}DtoRequest.java"; then
+    #         echo "        updated$model_name.set${field_name^}($lowercase_model_name.get${field_name^}());" >> "$service_impl_file"
+    #     fi
+    # done
+    echo "        log.info(\"$class_name update by id: {}\", $lowercase_model_name);" >> "$service_impl_file"
+    echo "        return ${lowercase_model_name}Repository.save($lowercase_model_name);" >> "$service_impl_file"
     echo "    }" >> "$service_impl_file"
     echo "" >> "$service_impl_file"
 
@@ -776,7 +786,7 @@ generate_controller() {
     echo "import $base_package_name.dto.request.${model_name}DtoRequest;" >> "$controller_file"
     echo "import $base_package_name.dto.response.${model_name}DtoResponse;" >> "$controller_file"
     echo "import $base_package_name.model.$class_name;" >> "$controller_file"
-    echo "import $base_package_name.service.impl.${model_name}ServiceImpl;" >> "$controller_file"
+    echo "import $base_package_name.service.${model_name}Service;" >> "$controller_file"
     echo "import io.swagger.v3.oas.annotations.Operation;" >> "$controller_file"
     echo "import io.swagger.v3.oas.annotations.responses.ApiResponse;" >> "$controller_file"
     echo "import jakarta.validation.Valid;" >> "$controller_file"
@@ -789,9 +799,9 @@ generate_controller() {
     echo "@RestController" >> "$controller_file"
     echo "@RequestMapping(\"/api/$request_model_name\")" >> "$controller_file"
     echo "public class ${model_name}Controller {" >> "$controller_file"
-    echo "    private final ${model_name}ServiceImpl ${lowercase_model_name}Service;" >> "$controller_file"
+    echo "    private final ${model_name}Service ${lowercase_model_name}Service;" >> "$controller_file"
     echo "" >> "$controller_file"
-    echo "    public ${model_name}Controller(${model_name}ServiceImpl ${lowercase_model_name}Service) {" >> "$controller_file"
+    echo "    public ${model_name}Controller(${model_name}Service ${lowercase_model_name}Service) {" >> "$controller_file"
     echo "        this.${lowercase_model_name}Service = ${lowercase_model_name}Service;" >> "$controller_file"
     echo "    }" >> "$controller_file"
     echo "" >> "$controller_file"

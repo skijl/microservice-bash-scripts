@@ -1,0 +1,18 @@
+    }
+
+    @Test
+    void testCreate${model_name}_InvalidInput() throws Exception {
+        mockMvc.perform(post("${controller_api}")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(${lowercase_model_name}Request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON));
+    }
+
+    @Test
+    void testGet${model_name}() throws Exception {
+        when(${lowercase_model_name}Service.getById(Static${model_name}.ID)).thenReturn(${lowercase_model_name}Model);
+
+        mockMvc.perform(get("${controller_api}/{id}", Static${model_name}.ID))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))

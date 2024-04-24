@@ -1,0 +1,44 @@
+        when(${lowercase_model_name}Repository.findById(Static${model_name}.ID)).thenThrow(new DataAccessException("Database connection failed") {
+        });
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            ${lowercase_model_name}Service.getById(Static${model_name}.ID);
+        });
+
+        assertNotNull(exception);
+        assertEquals("Database connection failed", exception.getMessage());
+        verify(${lowercase_model_name}Repository, times(1)).findById(Static${model_name}.ID);
+    }
+
+    @Test
+    public void testGetAll() {
+        List<${class_name}> ${lowercase_model_name}List = new ArrayList<>();
+        ${lowercase_model_name}List.add(${lowercase_model_name});
+        ${lowercase_model_name}List.add(${lowercase_model_name}2);
+        when(${lowercase_model_name}Repository.findAll()).thenReturn(${lowercase_model_name}List);
+
+        List<${class_name}> result = ${lowercase_model_name}Service.getAll();
+
+        assertEquals(${lowercase_model_name}List.size(), result.size());
+        assertEquals(${lowercase_model_name}, result.get(0));
+        assertEquals(${lowercase_model_name}2, result.get(1));
+    }
+
+    @Test
+    public void testGetAll_DataAccessException() {
+        when(${lowercase_model_name}Repository.findAll()).thenThrow(new DataAccessException("Database connection failed") {
+        });
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            ${lowercase_model_name}Service.getAll();
+        });
+
+        assertNotNull(exception);
+        assertEquals("Database connection failed", exception.getMessage());
+        verify(${lowercase_model_name}Repository, times(1)).findAll();
+    }
+
+    @Test
+    public void testUpdate_Success() {
+	    ${class_name} existing${model_name} = Static${model_name}.${lowercase_model_name}1();
+        ${class_name} updated${model_name} = Static${model_name}.${lowercase_model_name}2();
