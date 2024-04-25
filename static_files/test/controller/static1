@@ -2,11 +2,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.List;
+
+import static org.hamcrest.Matchers.hasSize;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -18,8 +25,11 @@ public class ${model_name}ControllerTest {
     @Mock
     private ${model_name}Service ${lowercase_model_name}Service;
 
+    private final String DOCUMENTATION_URI = "http://swagger_documentation";
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private final ${model_name}DtoRequest ${lowercase_model_name}Request = Static${model_name}.${lowercase_model_name}DtoRequest1();
-    private final ${class_name} ${lowercase_model_name}Model = Static${model_name}.${lowercase_model_name}1();
+    private final ${class_name} ${lowercase_model_name}Model = Static${model_name}.${lowercase_model_name}1(); 
     private final ${model_name}DtoResponse ${lowercase_model_name}Response = Static${model_name}.${lowercase_model_name}DtoResponse1();
 
     @BeforeEach
@@ -27,16 +37,16 @@ public class ${model_name}ControllerTest {
         MockitoAnnotations.openMocks(this);
         ${model_name}Controller ${lowercase_model_name}Controller = new ${model_name}Controller(${lowercase_model_name}Service);
         mockMvc = MockMvcBuilders.standaloneSetup(${lowercase_model_name}Controller)
-                .setControllerAdvice(new GlobalExceptionHandler("documentation_uri"))
+                .setControllerAdvice(new GlobalExceptionHandler(DOCUMENTATION_URI))
                 .build();
     }
 
     @Test
-    void testCreate${model_name}() throws Exception {
+    void testCreate_Success() throws Exception {
         when(${lowercase_model_name}Service.create(any(${class_name}.class))).thenReturn(${lowercase_model_name}Model);
 
         mockMvc.perform(post("${controller_api}")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(new ObjectMapper().writeValueAsString(${lowercase_model_name}Request)))
+                        .content(objectMapper.writeValueAsString(${lowercase_model_name}Request)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))

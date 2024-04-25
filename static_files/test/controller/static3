@@ -1,0 +1,53 @@
+    }
+
+    @Test
+    void testGetById_EntityNotFoundException() throws Exception {
+        when(${lowercase_model_name}Service.getById(any())).thenThrow(new EntityNotFoundException("${model_name} not found"));
+
+        mockMvc.perform(get("${controller_api}/"+Static${model_name}.ID))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorMessage").value("${model_name} not found"))
+                .andExpect(jsonPath("$.documentationUri").value(DOCUMENTATION_URI));
+    }
+
+    @Test
+    void testGetById_DataAccessException() throws Exception {
+        doThrow(new DataAccessException("Database connection failed") {}).when(${lowercase_model_name}Service).getById(any());
+
+        mockMvc.perform(get("${controller_api}/"+Static${model_name}.ID))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.errorMessage").value("Database connection failed"))
+                .andExpect(jsonPath("$.documentationUri").value(DOCUMENTATION_URI));
+    }
+
+
+    @Test
+    void testGetAll_Success() throws Exception {
+        List<${class_name}> ${lowercase_model_name}Models = Arrays.asList(${lowercase_model_name}Model);
+        when(${lowercase_model_name}Service.getAll()).thenReturn(${lowercase_model_name}Models);
+
+        mockMvc.perform(get("${controller_api}/"))
+                .andExpect(status().isOk())
+		.andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$.[0].id").value(${lowercase_model_name}Response.getId()));
+    }
+
+    @Test
+    void testGetAll_DataAccessException() throws Exception {
+        doThrow(new DataAccessException("Database connection failed") {}).when(${lowercase_model_name}Service).getAll();
+
+        mockMvc.perform(get("${controller_api}/"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.errorMessage").value("Database connection failed"))
+                .andExpect(jsonPath("$.documentationUri").value(DOCUMENTATION_URI));
+    }
+
+
+    @Test
+    void testUpdate_Success() throws Exception {
+        when(${lowercase_model_name}Service.update(any(), any(${class_name}.class))).thenReturn(${lowercase_model_name}Model);
+
+        mockMvc.perform(put("${controller_api}/"+Static${model_name}.ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(${lowercase_model_name}Request)))
+                .andExpect(status().isCreated())

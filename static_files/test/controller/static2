@@ -1,16 +1,40 @@
     }
 
     @Test
-    void testCreate${model_name}_InvalidInput() throws Exception {
+    void testCreate_InvalidInput() throws Exception {
         mockMvc.perform(post("${controller_api}")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(new ObjectMapper().writeValueAsString(${lowercase_model_name}Request)))
+                        .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON));
     }
 
     @Test
-    void testGet${model_name}() throws Exception {
+    void testCreate_EntityNotFoundException() throws Exception {
+        when(${lowercase_model_name}Service.create(any(${class_name}.class))).thenThrow(new EntityNotFoundException("${model_name} not found"));
+
+        mockMvc.perform(post("${controller_api}")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(${lowercase_model_name}Request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorMessage").value("${model_name} not found"))
+                .andExpect(jsonPath("$.documentationUri").value(DOCUMENTATION_URI));
+    }
+
+    @Test
+    void testCreate_DataAccessException() throws Exception {
+        doThrow(new DataAccessException("Database connection failed") {}).when(${lowercase_model_name}Service).create(any(${class_name}.class));
+
+        mockMvc.perform(post("${controller_api}")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(${lowercase_model_name}Request)))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.errorMessage").value("Database connection failed"))
+                .andExpect(jsonPath("$.documentationUri").value(DOCUMENTATION_URI));
+    }
+
+    @Test
+    void testGetById_Success() throws Exception {
         when(${lowercase_model_name}Service.getById(Static${model_name}.ID)).thenReturn(${lowercase_model_name}Model);
 
         mockMvc.perform(get("${controller_api}/{id}", Static${model_name}.ID))

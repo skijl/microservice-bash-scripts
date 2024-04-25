@@ -22,6 +22,7 @@ fi
 
 # Set the source directory for models
 MODELS_DIR="$BASE_DIR/model"
+STATIC_FILES_DIR="/d/scripts/static_files/main"
 
 # For imports
 base_package_name=$(echo "$BASE_DIR" | sed 's|.*java/||; s|/|.|g')
@@ -196,15 +197,20 @@ generate_response_dto() {
         field_name=$(echo "$field" | awk '{print $2}')
 
         case $field_type in
-        String|Long|Integer|BigDecimal|Double)
-            ;;
+        String|Long|Integer|BigDecimal|Double|LocalDateTime)
+            if [ $field_type == "LocalDateTime" ] ; then
+            if ! sed -n '3p' "$create_response_file" | grep -q "import com.fasterxml.jackson.annotation.JsonFormat;"; then
+                sed -i '3i\import com.fasterxml.jackson.annotation.JsonFormat;' "$create_response_file"
+            fi
+                echo "    @JsonFormat(pattern = \"yyyy-MM-dd'T'HH:mm:ss\")" >> "$create_response_file"
+            fi ;;
         *)
             if [[ $field_name == *Model ]]; then
                 field_name="${field_name%Model}"
             fi
             if [ -f "$MODELS_DIR/$field_type.java" ]; then
                 if [[ $field_type == *Model ]]; then
-                    field_type="${field_type%Model}" # Update field_type without '$'
+                    field_type="${field_type%Model}"
                 fi
                 field_type="${field_type}DtoResponse"
             fi
@@ -785,77 +791,9 @@ generate_controller() {
     echo "import $base_package_name.dto.dtoMapper.${model_name}DtoMapper;" >> "$controller_file"
     echo "import $base_package_name.dto.request.${model_name}DtoRequest;" >> "$controller_file"
     echo "import $base_package_name.dto.response.${model_name}DtoResponse;" >> "$controller_file"
-    echo "import $base_package_name.model.$class_name;" >> "$controller_file"
+    echo "import $base_package_name.model.${class_name};" >> "$controller_file"
     echo "import $base_package_name.service.${model_name}Service;" >> "$controller_file"
-    echo "import io.swagger.v3.oas.annotations.Operation;" >> "$controller_file"
-    echo "import io.swagger.v3.oas.annotations.responses.ApiResponse;" >> "$controller_file"
-    echo "import jakarta.validation.Valid;" >> "$controller_file"
-    echo "import org.springframework.http.HttpStatus;" >>"$controller_file"
-    echo "import org.springframework.http.ResponseEntity;" >> "$controller_file"
-    echo "import org.springframework.web.bind.annotation.*;" >> "$controller_file"
-    echo "" >> "$controller_file"
-    echo "import java.util.List;" >> "$controller_file"
-    echo "" >> "$controller_file"
-    echo "@RestController" >> "$controller_file"
-    echo "@RequestMapping(\"/api/$request_model_name\")" >> "$controller_file"
-    echo "public class ${model_name}Controller {" >> "$controller_file"
-    echo "    private final ${model_name}Service ${lowercase_model_name}Service;" >> "$controller_file"
-    echo "" >> "$controller_file"
-    echo "    public ${model_name}Controller(${model_name}Service ${lowercase_model_name}Service) {" >> "$controller_file"
-    echo "        this.${lowercase_model_name}Service = ${lowercase_model_name}Service;" >> "$controller_file"
-    echo "    }" >> "$controller_file"
-    echo "" >> "$controller_file"
-    # Create method
-    echo "    @PostMapping" >> "$controller_file"
-    echo "    @Operation(summary = \"Create an ${lowercase_model_name}\", description = \"Create new ${lowercase_model_name}\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"201\", description = \"${model_name} saved successfully\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"400\", description = \"Invalid input\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"404\", description = \"Invalid foreign key that is not found\")" >> "$controller_file"
-    echo "    public ResponseEntity<${model_name}DtoResponse> create${model_name}(@Valid @RequestBody ${model_name}DtoRequest ${lowercase_model_name}DtoRequest) {" >> "$controller_file"
-    echo "        ${class_name} ${lowercase_model_name} = ${model_name}DtoMapper.toModel(${lowercase_model_name}DtoRequest);" >> "$controller_file"
-    echo "        ${lowercase_model_name} = ${lowercase_model_name}Service.create(${lowercase_model_name});" >> "$controller_file"
-    echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.CREATED);" >> "$controller_file"
-    echo "    }" >> "$controller_file"
-    echo "" >> "$controller_file"
-    # GetById method
-    echo "    @GetMapping(\"/{id}\")" >> "$controller_file"
-    echo "    @Operation(summary = \"Get ${model_name}\", description = \"Get ${model_name} By Id\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"200\", description = \"${model_name} Get successfully\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"404\", description = \"${model_name} with such an Id not found\")" >> "$controller_file"
-    echo "    public ResponseEntity<${model_name}DtoResponse> get${model_name}ById(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
-    echo "        ${class_name} ${lowercase_model_name} = ${lowercase_model_name}Service.getById(id);" >> "$controller_file"
-    echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.OK);" >> "$controller_file"
-    echo "    }" >> "$controller_file"
-    echo "" >> "$controller_file"
-    # GetAll method
-    echo "    @GetMapping(\"\")" >> "$controller_file"
-    echo "    @Operation(summary = \"Get All ${model_name}\", description = \"Get All ${model_name}\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"200\", description = \"${model_name} Get All successfully\")" >> "$controller_file"
-    echo "    public ResponseEntity<List<${model_name}DtoResponse>> getAll${model_name}() {" >> "$controller_file"
-    echo "        List<${class_name}> ${lowercase_model_name}List = ${lowercase_model_name}Service.getAll();" >> "$controller_file"
-    echo "        return new ResponseEntity<>(${lowercase_model_name}List.stream().map(${model_name}DtoMapper::toResponse).toList(), HttpStatus.OK);" >> "$controller_file"
-    echo "    }" >> "$controller_file"
-    echo "" >> "$controller_file"
-    # Update method
-    echo "    @PutMapping(\"/{id}\")" >> "$controller_file"
-    echo "    @Operation(summary = \"Update an ${lowercase_model_name}\", description = \"Update an ${lowercase_model_name} by Id and new ${model_name}\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"201\", description = \"${model_name} updated successfully\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"400\", description = \"Invalid input\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"404\", description = \"${model_name} with such an Id not found or invalid foreign key that is not found\")" >> "$controller_file"
-    echo "    public ResponseEntity<${model_name}DtoResponse> update${model_name}(@PathVariable(\"id\") ${id_type} id, @Valid @RequestBody ${model_name}DtoRequest ${lowercase_model_name}DtoRequest) {" >> "$controller_file"
-    echo "        ${class_name} ${lowercase_model_name} = ${model_name}DtoMapper.toModel(${lowercase_model_name}DtoRequest);" >> "$controller_file"
-    echo "        ${lowercase_model_name} = ${lowercase_model_name}Service.update(id, ${lowercase_model_name});" >> "$controller_file"
-    echo "        return new ResponseEntity<>(${model_name}DtoMapper.toResponse(${lowercase_model_name}), HttpStatus.CREATED);" >> "$controller_file"
-    echo "    }" >> "$controller_file"
-    echo "" >> "$controller_file"
-    # Delete method
-    echo "    @DeleteMapping(\"/{id}\")" >> "$controller_file"
-    echo "    @Operation(summary = \"Delete an ${lowercase_model_name}\", description = \"Delete an ${lowercase_model_name} by id\")" >> "$controller_file"
-    echo "    @ApiResponse(responseCode = \"204\", description = \"${model_name} deleted successfully\")" >> "$controller_file"
-    echo "    public ResponseEntity<Boolean> delete${model_name}(@PathVariable(\"id\") ${id_type} id) {" >> "$controller_file"
-    echo "        return new ResponseEntity<>(${lowercase_model_name}Service.deleteById(id), HttpStatus.NO_CONTENT);" >> "$controller_file"
-    echo "    }" >> "$controller_file"
-    echo "}" >> "$controller_file"
+    sed "s~\${model_name}~$model_name~g; s~\${lowercase_model_name}~$lowercase_model_name~g; s~\${request_model_name}~$request_model_name~g; s~\${id_type}~$id_type~g; s~\${class_name}~$class_name~g" "$STATIC_FILES_DIR/controller/static1" >> "$controller_file"
 }
 
 # Create controller directory if it doesn't exist
